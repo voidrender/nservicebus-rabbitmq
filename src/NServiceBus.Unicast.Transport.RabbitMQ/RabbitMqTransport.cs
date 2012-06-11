@@ -41,16 +41,17 @@ namespace NServiceBus.Unicast.Transport.RabbitMQ
 
 		public void Start()
 		{
+			inputAddress = new RabbitMqAddress(InputBroker, InputVirtualHost, InputUsername, InputPassword, InputExchange, InputQueue, InputRoutingKeys, false);
+			errorAddress = new RabbitMqAddress(ErrorBroker, ErrorVirtualHost, ErrorUsername, ErrorPassword, ErrorExchange, ErrorQueue, ErrorRoutingKeys, false);
+
 			CreateExchangesAndQueuesIfNecessary();
 			BindExchangesAndQueues();
-
-			inputAddress = new RabbitMqAddress(InputBroker, InputExchange, InputQueue, InputRoutingKeys);
-			errorAddress = new RabbitMqAddress(ErrorBroker, ErrorExchange, ErrorQueue, ErrorRoutingKeys);
 
 			for (var i = 0; i < numberOfWorkerThreads; ++i)
 				AddWorkerThread().Start();
 		}
 
+		
 		public void ChangeNumberOfWorkerThreads(Int32 targetNumberOfWorkerThreads)
 		{
 			lock (workers)
@@ -77,19 +78,23 @@ namespace NServiceBus.Unicast.Transport.RabbitMQ
 		private void CreateExchangesAndQueuesIfNecessary()
 		{
 			if (DoNotCreateInputExchange == false)
-				DeclareExchange(InputBroker, InputExchange, InputExchangeType);
+				DeclareExchange(inputAddress, InputExchange, InputExchangeType);
 
 			if (DoNotCreateInputQueue == false)
-				DeclareQueue(InputBroker, InputQueue);
+				DeclareQueue(inputAddress, InputQueue, InputIsDurable);
 
 			if (DoNotCreateErrorExchange == false)
-				DeclareExchange(ErrorBroker, ErrorExchange, ErrorExchangeType);
+				DeclareExchange(errorAddress, ErrorExchange, ErrorExchangeType);
 
 			if (DoNotCreateErrorQueue == false)
-				DeclareQueue(ErrorBroker, ErrorQueue);
+				DeclareQueue(errorAddress, ErrorQueue, ErrorIsDurable);
 		}
 
-		private void DeclareQueue(string broker, string queue)
+		public bool ErrorIsDurable { get; set; }
+
+		public bool InputIsDurable { get; set; }
+
+		private void DeclareQueue(RabbitMqAddress broker, string queue, bool durable)
 		{
 			if (string.IsNullOrEmpty(queue))
 			{
@@ -100,15 +105,14 @@ namespace NServiceBus.Unicast.Transport.RabbitMQ
 				//throw new InvalidOperationException(message);
 			}
 
-			using (var connection = connectionProvider.Open(ProtocolName, broker, true))
+			using (var channel = connectionProvider.Open(ProtocolName, broker, true))
 			{
-				var channel = connection.Model();
 				log.InfoFormat("Declaring Queue {0} on Broker {1}", queue, broker);
-				channel.QueueDeclare(queue, false, false, false, null);
+				channel.QueueDeclare(queue, durable, false, false, null);
 			}
 		}
 
-		private void DeclareExchange(string broker, string exchange, string exchangeType)
+		private void DeclareExchange(RabbitMqAddress broker, string exchange, string exchangeType)
 		{
 			if (string.IsNullOrEmpty(exchange))
 			{
@@ -119,10 +123,8 @@ namespace NServiceBus.Unicast.Transport.RabbitMQ
 				//throw new InvalidOperationException(message);
 			}
 
-			using (var connection = connectionProvider.Open(ProtocolName, broker, true))
+			using (var channel = connectionProvider.Open(ProtocolName, broker, true))
 			{
-				var channel = connection.Model();
-
 				log.InfoFormat(
 					"Declaring Exchange {0} of Type {1} on Broker {2}",
 					exchange,
@@ -135,20 +137,19 @@ namespace NServiceBus.Unicast.Transport.RabbitMQ
 
 		private void BindExchangesAndQueues()
 		{
-			BindQueue(InputBroker, InputExchange, InputQueue, InputRoutingKeys);
-			BindQueue(ErrorBroker, ErrorExchange, ErrorQueue, ErrorRoutingKeys);
+			BindQueue(inputAddress, InputExchange, InputQueue, InputRoutingKeys);
+			BindQueue(errorAddress, ErrorExchange, ErrorQueue, ErrorRoutingKeys);
 		}
 
-		private void BindQueue(string broker, string exchange, string queue, string routingKeys)
+		private void BindQueue(RabbitMqAddress broker, string exchange, string queue, string routingKeys)
 		{
-			if(string.IsNullOrEmpty(exchange))
+			if (string.IsNullOrEmpty(exchange))
 				return;
 
-			using (var connection = connectionProvider.Open(ProtocolName, broker, true))
+			using (var channel = connectionProvider.Open(ProtocolName, broker, true))
 			{
-				var channel = connection.Model();
 				var keys = routingKeys.Split(new[] { " " }, StringSplitOptions.RemoveEmptyEntries);
-				keys = keys.Length == 0 ? new[] {""} : keys;
+				keys = keys.Length == 0 ? new[] { queue } : keys;
 
 				foreach(var key in keys)
 				{
@@ -166,14 +167,20 @@ namespace NServiceBus.Unicast.Transport.RabbitMQ
 			if(address == inputAddress)
 				address = 
 					new RabbitMqAddress(
-						inputAddress.Broker, inputAddress.Exchange, inputAddress.QueueName);
+						inputAddress.Broker, 
+						inputAddress.VirtualHost, 
+						inputAddress.Username, 
+						inputAddress.Password, 
+						inputAddress.Exchange, 
+						inputAddress.QueueName, 
+						string.Empty, 
+						false);
 
 			using (var stream = new MemoryStream())
 			{
 				this.MessageSerializer.Serialize(transportMessage.Body, stream);
-				using (var connection = connectionProvider.Open(this.ProtocolName, address.Broker, true))
+				using (var channel = connectionProvider.Open(this.ProtocolName, address, true))
 				{
-					var channel = connection.Model();
 					var messageId = Guid.NewGuid().ToString();
 					var properties = channel.CreateBasicProperties();
 					properties.MessageId = messageId;
@@ -273,61 +280,57 @@ namespace NServiceBus.Unicast.Transport.RabbitMQ
 		private void Process()
 		{
 			messageContext = new MessageReceiveProperties();
-			try
-			{
-				var wrapper = new TransactionWrapper();
-				wrapper.RunInTransaction(() => Receive(messageContext), isolationLevel, transactionTimeout);
-				ClearFailuresForMessage(messageContext.MessageId);
-			}
-			catch (AbortHandlingCurrentMessageException)
-			{
-			}
-			catch (Exception error)
-			{
-				log.Error(error);
-				IncrementFailuresForMessage(messageContext.MessageId);
-				OnFailedMessageProcessing(error);
-			}
-			finally
-			{
-				messageContext = null;
-			}
+			var wrapper = new TransactionWrapper();
+			wrapper.RunInTransaction(() => Receive(messageContext), isolationLevel, transactionTimeout);
+			ClearFailuresForMessage(messageContext.MessageId);
+			messageContext = null;
 		}
 
 		private void Receive(MessageReceiveProperties messageContext)
 		{
-			using (var connection = connectionProvider.Open(this.ProtocolName, inputAddress.Broker, true))
+			using (var channel = connectionProvider.Open(this.ProtocolName, inputAddress, true))
 			{
-				var channel = connection.Model();
 				var consumer = new QueueingBasicConsumer(channel);
 
-				channel.BasicConsume(inputAddress.QueueName, SendAcknowledgement, consumer);
+				channel.BasicConsume(inputAddress.QueueName, false, consumer);
 
 				var delivery = consumer.Receive(receiveTimeout);
 				if (delivery != null)
 				{
-					log.Debug("Receiving from " + inputAddress);
-					DeliverMessage(channel, messageContext, delivery);
+					try
+					{
+						log.Debug("Receiving from " + inputAddress);
+						DeliverMessage(channel, messageContext, delivery);
+					}
+					catch (AbortHandlingCurrentMessageException)
+					{
+						return;
+					}
+					catch
+					{
+						//IncrementFailuresForMessage(messageContext.MessageId);
+						MoveToPoison(delivery);
+						OnFailedMessageProcessing();
+						channel.BasicAck(delivery.DeliveryTag, false);
+					}
 				}
 			}
 		}
 
 		private void DeliverMessage(IModel channel, MessageReceiveProperties messageContext, BasicDeliverEventArgs delivery)
 		{
-			messageContext.MessageId = delivery.BasicProperties.MessageId;
-			if (HandledMaximumRetries(messageContext.MessageId))
-			{
-				MoveToPoison(delivery);
-				channel.BasicAck(delivery.DeliveryTag, false);
-				return;
-			}
+			messageContext.MessageId = delivery.ConsumerTag;
 
-			var startedProcessingError = OnStartedMessageProcessing();
-			if (startedProcessingError != null)
-			{
-				throw new MessageHandlingException("Exception occured while starting to process message.", startedProcessingError,
-												   null, null);
-			}
+			//problems with message id
+			//if (HandledMaximumRetries(messageContext.MessageId))
+			//{
+			//    MoveToPoison(delivery);
+			//    channel.BasicAck(delivery.DeliveryTag, false);
+			//    return;
+			//}
+
+			if (StartedMessageProcessing != null)
+				StartedMessageProcessing(this, null);
 
 			var m = new TransportMessage();
 			try
@@ -342,14 +345,17 @@ namespace NServiceBus.Unicast.Transport.RabbitMQ
 				log.Error("Could not extract message data.", deserializeError);
 				MoveToPoison(delivery);
 				OnFinishedMessageProcessing();
+				channel.BasicAck(delivery.DeliveryTag, false);
 				return;
 			}
+
 			m.Id = delivery.BasicProperties.MessageId;
 			m.CorrelationId = delivery.BasicProperties.CorrelationId;
 			m.IdForCorrelation = delivery.BasicProperties.MessageId;
 			m.ReturnAddress = delivery.BasicProperties.ReplyTo;
 			m.TimeSent = delivery.BasicProperties.Timestamp.ToDateTime();
 			m.Headers = m.Headers ?? new List<HeaderInfo>();
+
 			if (delivery.BasicProperties.Headers != null && delivery.BasicProperties.Headers.Count > 0)
 			{
 				foreach (DictionaryEntry entry in delivery.BasicProperties.Headers)
@@ -367,17 +373,15 @@ namespace NServiceBus.Unicast.Transport.RabbitMQ
 			}
 
 			m.Recoverable = delivery.BasicProperties.DeliveryMode == 2;
-			var receivingError = OnTransportMessageReceived(m);
-			var finishedProcessingError = OnFinishedMessageProcessing();
+			var noErrorReceiving = OnTransportMessageReceived(m);
+			var noErrorFinishing = OnFinishedMessageProcessing();
+
 			if (messageContext.NeedToAbort)
-			{
 				throw new AbortHandlingCurrentMessageException();
-			}
-			if (receivingError != null || finishedProcessingError != null)
-			{
-				throw new MessageHandlingException("Exception occured while processing message.", null, receivingError,
-												   finishedProcessingError);
-			}
+
+			if (!(noErrorReceiving && noErrorFinishing))
+				throw new MessageHandlingException("Exception occured while processing message.");
+
 			channel.BasicAck(delivery.DeliveryTag, false);
 		}
 
@@ -442,80 +446,58 @@ namespace NServiceBus.Unicast.Transport.RabbitMQ
 				log.Info("Discarding " + delivery.BasicProperties.MessageId);
 				return;
 			}
-			using (var connection = connectionProvider.Open(this.ProtocolName, inputAddress.Broker, false))
+			using (var channel = connectionProvider.Open(this.ProtocolName, errorAddress, false))
 			{
-				var channel = connection.Model();
 				log.Info("Moving " + delivery.BasicProperties.MessageId + " to " + errorAddress);
 				channel.BasicPublish(errorAddress.Exchange, errorAddress.QueueName, delivery.BasicProperties, delivery.Body);
 			}
 		}
 
-		private Exception OnFailedMessageProcessing(Exception error)
+		private bool OnFailedMessageProcessing()
 		{
 			try
 			{
-				if (this.FailedMessageProcessing != null)
-				{
-					this.FailedMessageProcessing(this, new ThreadExceptionEventArgs(error));
-				}
+				if (FailedMessageProcessing != null)
+					FailedMessageProcessing(this, null);
 			}
-			catch (Exception processingError)
+			catch (Exception e)
 			{
-				log.Error("Failed raising 'failed message processing' event.", processingError);
-				return processingError;
+				log.Error("Failed raising 'failed message processing' event.", e);
+				return false;
 			}
-			return null;
+
+			return true;
 		}
 
-		private Exception OnStartedMessageProcessing()
+		private bool OnFinishedMessageProcessing()
 		{
 			try
 			{
-				if (this.StartedMessageProcessing != null)
-				{
-					this.StartedMessageProcessing(this, null);
-				}
+				if (FinishedMessageProcessing != null)
+					FinishedMessageProcessing(this, null);
 			}
-			catch (Exception processingError)
+			catch (Exception e)
 			{
-				log.Error("Failed raising 'started message processing' event.", processingError);
-				return processingError;
+				log.Error("Failed raising 'finished message processing' event.", e);
+				return false;
 			}
-			return null;
+			return true;
 		}
 
-		private Exception OnFinishedMessageProcessing()
+		private bool OnTransportMessageReceived(TransportMessage msg)
 		{
 			try
 			{
-				if (this.FinishedMessageProcessing != null)
-				{
-					this.FinishedMessageProcessing(this, null);
-				}
+				if (TransportMessageReceived != null)
+					TransportMessageReceived(this, new TransportMessageReceivedEventArgs(msg));
 			}
-			catch (Exception processingError)
+			catch (Exception e)
 			{
-				log.Error("Failed raising 'finished message processing' event.", processingError);
-				return processingError;
+				log.Error("Failed raising 'transport message received' event for message with ID=" + msg.Id, e);
+				return false;
 			}
-			return null;
-		}
 
-		private Exception OnTransportMessageReceived(TransportMessage msg)
-		{
-			try
-			{
-				if (this.TransportMessageReceived != null)
-				{
-					this.TransportMessageReceived(this, new TransportMessageReceivedEventArgs(msg));
-				}
-			}
-			catch (Exception processingError)
-			{
-				log.Error("Failed raising 'transport message received' event.", processingError);
-				return processingError;
-			}
-			return null;
+			return true;
 		}
 
 		public void Dispose()
@@ -623,30 +605,15 @@ namespace NServiceBus.Unicast.Transport.RabbitMQ
 		public bool DoNotCreateErrorExchange { get; set; }
 
 		public bool DoNotCreateErrorQueue { get; set; }
-	}
 
-	public static class ConsumerHelpers
-	{
-		private static readonly DateTime UnixEpoch = new DateTime(1970, 1, 1, 0, 0, 0, 0);
+		public string InputUsername { get; set; }
 
-		public static BasicDeliverEventArgs Receive(this QueueingBasicConsumer consumer, TimeSpan to)
-		{
-			object delivery;
-			if (!consumer.Queue.Dequeue((Int32) to.TotalMilliseconds, out delivery))
-			{
-				return null;
-			}
-			return delivery as BasicDeliverEventArgs;
-		}
+		public string InputPassword { get; set; }
 
-		public static DateTime ToDateTime(this AmqpTimestamp timestamp)
-		{
-			return UnixEpoch.AddSeconds(timestamp.UnixTime);
-		}
+		public string InputVirtualHost { get; set; }
+		public string ErrorPassword { get; set; }
+		public string ErrorUsername { get; set; }
+		public string ErrorVirtualHost { get; set; }
 
-		public static AmqpTimestamp ToAmqpTimestamp(this DateTime dateTime)
-		{
-			return new AmqpTimestamp((long) (dateTime - UnixEpoch).TotalSeconds);
-		}
 	}
 }

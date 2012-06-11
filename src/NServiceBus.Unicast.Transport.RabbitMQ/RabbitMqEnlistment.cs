@@ -81,5 +81,10 @@ namespace NServiceBus.Unicast.Transport.RabbitMQ
 		{
 			return model;
 		}
+
+		public IConnection Connection
+		{
+			get { return connection; }
+		}
 	}
 }

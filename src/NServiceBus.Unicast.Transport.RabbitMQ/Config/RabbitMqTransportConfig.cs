@@ -1,3 +1,4 @@
+using System;
 using System.Configuration;
 
 namespace NServiceBus.Unicast.Transport.RabbitMQ.Config
@@ -41,6 +42,13 @@ namespace NServiceBus.Unicast.Transport.RabbitMQ.Config
 			set { base["InputRoutingKeys"] = value; }
 		}
 
+		[ConfigurationProperty("InputIsDurable", IsRequired = false, DefaultValue = false)]
+		public bool InputIsDurable
+		{
+			get { return (bool) base["InputIsDurable"]; }
+			set { base["InputIsDurable"] = value; }
+		}
+
 		[ConfigurationProperty("DoNotCreateInputExchange", IsRequired = false, DefaultValue = false)]
 		public bool DoNotCreateInputExchange
 		{
@@ -55,6 +63,26 @@ namespace NServiceBus.Unicast.Transport.RabbitMQ.Config
 			set { base["DoNotCreateInputQueue"] = value; }
 		}
 
+		[ConfigurationProperty("InputUsername", IsRequired = false)]
+		public string InputUsername
+		{
+			get { return base["InputUsername"] as string; }
+			set { base["InputUsername"] = value; }
+		}
+
+		[ConfigurationProperty("InputPassword", IsRequired = false)]
+		public string InputPassword
+		{
+			get { return base["InputPassword"] as string; }
+			set { base["InputPassword"] = value; }
+		}
+
+		[ConfigurationProperty("InputVirtualHost", IsRequired = false)]
+		public string InputVirtualHost
+		{
+			get { return base["InputVirtualHost"] as string; }
+			set { base["InputVirtualHost"] = value; }
+		}
 		#endregion
 
 		#region Error Config
@@ -108,6 +136,34 @@ namespace NServiceBus.Unicast.Transport.RabbitMQ.Config
 			set { base["DoNotCreateErrorQueue"] = value; }
 		}
 
+		[ConfigurationProperty("ErrorUsername", IsRequired = false)]
+		public string ErrorUsername
+		{
+			get { return base["ErrorUsername"] as string; }
+			set { base["ErrorUsername"] = value; }
+		}
+
+		[ConfigurationProperty("ErrorPassword", IsRequired = false)]
+		public string ErrorPassword
+		{
+			get { return base["ErrorPassword"] as string; }
+			set { base["ErrorPassword"] = value; }
+		}
+
+		[ConfigurationProperty("ErrorVirtualHost", IsRequired = false)]
+		public string ErrorVirtualHost
+		{
+			get { return base["ErrorVirtualHost"] as string; }
+			set { base["ErrorVirtualHost"] = value; }
+		}
+		
+		[ConfigurationProperty("ErrorIsDurable", IsRequired = false, DefaultValue = false)]
+		public bool ErrorIsDurable
+		{
+			get { return (bool) base["ErrorIsDurable"]; }
+			set { base["ErrorIsDurable"] = value; }
+		}
+
 		#endregion
 
 		[ConfigurationProperty("MaxRetries", IsRequired = true)]
@@ -137,5 +193,6 @@ namespace NServiceBus.Unicast.Transport.RabbitMQ.Config
 			get { return (bool) base["SendAcknowledgement"]; }
 			set { base["SendAcknowledgement"] = value; }
 		}
+
 	}
 }

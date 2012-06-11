@@ -58,6 +58,7 @@
   <ItemGroup>
     <Compile Include="Config\RabbitMqTransportConfig.cs" />
     <Compile Include="ConnectionProvider.cs" />
+    <Compile Include="ConsumerHelpers.cs" />
     <Compile Include="RabbitMqAddress.cs" />
     <Compile Include="Config\ConfigureRabbitMq.cs" />
     <Compile Include="MessageHandlingException.cs" />

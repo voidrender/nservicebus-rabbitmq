@@ -30,17 +30,25 @@ namespace NServiceBus.Unicast.Transport.RabbitMQ.Config
 				this.config.ConfigureProperty(t => t.NumberOfWorkerThreads, cfg.NumberOfWorkerThreads);
 				this.config.ConfigureProperty(t => t.MaximumNumberOfRetries, cfg.MaxRetries);
 				this.config.ConfigureProperty(t => t.InputBroker, cfg.InputBroker);
+				this.config.ConfigureProperty(t => t.InputUsername, cfg.InputUsername);
+				this.config.ConfigureProperty(t => t.InputPassword, cfg.InputPassword);
+				this.config.ConfigureProperty(t => t.InputVirtualHost, cfg.InputVirtualHost);
 				this.config.ConfigureProperty(t => t.InputExchange, cfg.InputExchange);
 				this.config.ConfigureProperty(t => t.InputExchangeType, cfg.InputExchangeType);
 				this.config.ConfigureProperty(t => t.InputQueue, cfg.InputQueue);
 				this.config.ConfigureProperty(t => t.InputRoutingKeys, cfg.InputRoutingKeys);
+				this.config.ConfigureProperty(t => t.InputIsDurable, cfg.InputIsDurable);
 				this.config.ConfigureProperty(t => t.DoNotCreateInputExchange, cfg.DoNotCreateInputExchange);
 				this.config.ConfigureProperty(t => t.DoNotCreateInputQueue, cfg.DoNotCreateInputQueue);
 				this.config.ConfigureProperty(t => t.ErrorBroker, cfg.ErrorBroker);
 				this.config.ConfigureProperty(t => t.ErrorExchange, cfg.ErrorExchange);
+				this.config.ConfigureProperty(t => t.ErrorUsername, cfg.ErrorUsername);
+				this.config.ConfigureProperty(t => t.ErrorPassword, cfg.ErrorPassword);
+				this.config.ConfigureProperty(t => t.ErrorVirtualHost, cfg.ErrorVirtualHost);
 				this.config.ConfigureProperty(t => t.ErrorExchangeType, cfg.ErrorExchangeType);
 				this.config.ConfigureProperty(t => t.ErrorQueue, cfg.ErrorQueue);
 				this.config.ConfigureProperty(t => t.ErrorRoutingKeys, cfg.ErrorRoutingKeys);
+				this.config.ConfigureProperty(t => t.ErrorIsDurable, cfg.ErrorIsDurable);
 				this.config.ConfigureProperty(t => t.DoNotCreateErrorExchange, cfg.DoNotCreateErrorExchange);
 				this.config.ConfigureProperty(t => t.DoNotCreateErrorQueue, cfg.DoNotCreateErrorQueue);
 
