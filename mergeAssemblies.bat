@@ -1,0 +1,2 @@
+set KEYFILE_ARG=%1
+external-bin\ilmerge %KEYFILE_ARG% /target:library /targetPlatform:v4,"C:\Windows\Microsoft.NET\Framework\v4.0.30319" /log:output.txt /out:build/NServiceBus.RabbitMQ.dll src\NServiceBus.Unicast.Transport.RabbitMQ\bin\Release\NServiceBus.Unicast.Transport.RabbitMQ.dll src\NServiceBus.Unicast.Subscriptions.RabbitMQ\bin\Release\NServiceBus.Unicast.Subscriptions.RabbitMQ.dll lib\RabbitMQ\RabbitMQ.Client.dll lib\RabbitMQ\RabbitMQ.ServiceModel.dll

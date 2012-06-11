@@ -1,6 +1,21 @@
 # Build Folders (you can keep bin if you'd like, to store dlls and pdbs)
 bin
 obj
+Debug
+Release
+
+#resharper
+*_ReSharper*
+*resharper*
+*.sln.cache
+
+#solution user settings
+*.suo
+*.user
+
+#mstest
+TestResults
+glob:*.gpState
 
 # mstest test results
 TestResults
